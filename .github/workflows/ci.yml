@@ -1,0 +1,70 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+jobs:
+  test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-latest, macos-latest]
+        tmux-version: ['3.0a', '3.3', '3.6a']
+        neovim-version: ['v0.10.0', 'stable']
+
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Cache tmux ${{ matrix.tmux-version }}
+        id: cache-tmux
+        uses: actions/cache@v4
+        with:
+          path: /usr/local/bin/tmux
+          key: tmux-${{ runner.os }}-${{ matrix.tmux-version }}
+
+      - name: Install build dependencies (Linux)
+        if: runner.os == 'Linux' && steps.cache-tmux.outputs.cache-hit != 'true'
+        run: sudo apt-get update && sudo apt-get install -y libevent-dev libncurses-dev bison
+
+      - name: Install dependencies (macOS)
+        if: runner.os == 'macOS'
+        run: brew install libevent ncurses
+
+      - name: Build tmux ${{ matrix.tmux-version }}
+        if: steps.cache-tmux.outputs.cache-hit != 'true'
+        run: |
+          curl -sL "https://github.com/tmux/tmux/releases/download/${{ matrix.tmux-version }}/tmux-${{ matrix.tmux-version }}.tar.gz" | tar xz
+          cd "tmux-${{ matrix.tmux-version }}"
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            ./configure --prefix=/usr/local --disable-utf8proc \
+              CPPFLAGS="-I$(brew --prefix libevent)/include -I$(brew --prefix ncurses)/include" \
+              LDFLAGS="-L$(brew --prefix libevent)/lib -L$(brew --prefix ncurses)/lib"
+          else
+            ./configure LDFLAGS="-static"
+          fi
+          make -j"$(getconf _NPROCESSORS_ONLN)"
+          sudo make install
+
+      - name: Setup Neovim
+        uses: rhysd/action-setup-vim@v1
+        with:
+          neovim: true
+          version: ${{ matrix.neovim-version }}
+
+      - name: Link nvim into standard PATH
+        run: |
+          NVIM_BIN="$(which nvim)"
+          if [ "$(readlink -f /usr/local/bin/nvim 2>/dev/null)" != "$(readlink -f "$NVIM_BIN")" ]; then
+            sudo ln -sf "$NVIM_BIN" /usr/local/bin/nvim
+          fi
+
+      - name: Install bats
+        uses: bats-core/bats-action@4.0.0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Run tests
+        run: bats tests/
