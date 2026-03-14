@@ -78,31 +78,31 @@ load helpers
 	[ "$before" != "$after" ]
 }
 
-# Known issue: pgrep -oP finds the oldest nvim child, which is the
-# backgrounded (stopped) instance. The stopped nvim can't respond to RPC,
-# so navigation hangs. This test confirms pgrep picks the wrong process.
-@test "known issue: pgrep finds backgrounded nvim instead of foreground" {
-	start_session 1
+@test "backgrounded nvim: navigates with foreground instance" {
+	start_session 2
 	start_nvim "$TEST_SESSION.0"
+
+	# navigate once to populate the socket cache
+	navigate right
+	navigate left
+
+	local old_sock
+	old_sock=$(testmux display-message -t "$TEST_SESSION.0" -p '#{@nvim_socket}')
 
 	# background nvim and start a fresh one
 	testmux send-keys -t "$TEST_SESSION.0" C-z
 	sleep 0.5
 	start_nvim "$TEST_SESSION.0"
 
-	local shell_pid bg_pid fg_pid found_pid
-	shell_pid=$(testmux display-message -t "$TEST_SESSION.0" -p '#{pane_pid}')
-	bg_pid=$(pgrep -oP "$shell_pid" nvim 2>/dev/null)
-	fg_pid=$(pgrep -P "$shell_pid" nvim 2>/dev/null | tail -1)
+	# navigate without clearing cache — script should skip stale cached socket
+	navigate right
+	[ "$(active_pane)" = "1" ]
 
-	# the two instances should be different
-	[ "$bg_pid" != "$fg_pid" ]
-
-	# pgrep -oP (used by the script) returns the older, backgrounded one
-	[ "$bg_pid" -lt "$fg_pid" ]
-
-	# the backgrounded process is stopped
-	case "$(ps -o state= -p "$bg_pid")" in T*) ;; *) return 1 ;; esac
+	# verify the socket was updated to the new nvim instance
+	navigate left
+	local new_sock
+	new_sock=$(testmux display-message -t "$TEST_SESSION.0" -p '#{@nvim_socket}')
+	[ "$old_sock" != "$new_sock" ]
 }
 
 @test "cache: socket is cached on pane option" {

@@ -11,17 +11,29 @@ esac
 
 NL='
 '
-both=$(tmux display-message -p "#{pane_current_command} #{pane_pid} #{@nvim_socket}" \; \
-	display-message -t "$target_spec" -p "#{pane_current_command} #{pane_pid} #{@nvim_socket}" 2>/dev/null) || true
+both=$(tmux display-message -p "#{pane_current_command} #{pane_pid} #{@nvim_pid} #{@nvim_socket}" \; \
+	display-message -t "$target_spec" -p "#{pane_current_command} #{pane_pid} #{@nvim_pid} #{@nvim_socket}" 2>/dev/null) || true
 info=${both%%"$NL"*}; target_info=${both#*"$NL"}
 [ "$target_info" = "$both" ] && target_info=""
 pane_cmd=${info%% *}; rest=${info#* }
-pane_pid=${rest%% *}; cached_sock=${rest#* }
+pane_pid=${rest%% *}; rest=${rest#* }
+cached_nvim_pid=${rest%% *}; cached_sock=${rest#* }
 target_cmd=${target_info%% *}; target_rest=${target_info#* }
-target_pid=${target_rest%% *}; target_cached=${target_rest#* }
+target_pid=${target_rest%% *}; target_rest=${target_rest#* }
+target_cached_pid=${target_rest%% *}; target_cached=${target_rest#* }
+
+# Find the first non-stopped nvim child of a given parent
+pgrep_nvim() {
+    for _p in $(pgrep -P "$1" nvim 2>/dev/null); do
+        case "$(ps -o state= -p "$_p")" in T*) continue ;; esac
+        echo "$_p"
+        return
+    done
+    return 1
+}
 
 find_nvim() {
-	child=$(pgrep -oP "$1" nvim 2>/dev/null) || true
+	child=$(pgrep_nvim "$1") || true
 	if [ -n "$child" ]; then
 		find_nvim "$child"
 	else
@@ -29,13 +41,15 @@ find_nvim() {
 	fi
 }
 
+# nvim_socket parent_pid [cached_socket] [cached_nvim_pid]
+# Outputs: socket_path\nnvim_pid  (two lines)
 nvim_socket() {
-	if [ -n "$2" ] && [ -S "$2" ]; then
-		echo "$2"
-		return
+	if [ -n "$2" ] && [ -S "$2" ] && [ -n "$3" ]; then
+		case "$(ps -o state= -p "$3" 2>/dev/null)" in T*) ;; *)
+			printf '%s\n%s' "$2" "$3"; return ;; esac
 	fi
-	_pid=$(pgrep -oP "$1" nvim 2>/dev/null) || return 1
-	_pid=$(find_nvim "$_pid")
+	_first=$(pgrep_nvim "$1") || return 1
+	_pid=$(find_nvim "$_first")
 	# try standard paths (Linux), then lsof (macOS/BSD)
 	for _d in "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}" /tmp/nvim.*/*/; do
 		for _s in "$_d"/nvim."$_pid".* ; do
@@ -47,13 +61,17 @@ nvim_socket() {
 		_sock=${_sock#n}
 	fi
 	[ -n "$_sock" ] || return 1
-	echo "$_sock"
+	printf '%s\n%s' "$_sock" "$_first"
 }
 
 reposition_target() {
 	[ "$target_cmd" != "nvim" ] && return
-	sock=$(nvim_socket "$target_pid" "$target_cached") || return
-	[ "$sock" != "$target_cached" ] && tmux set-option -p -t "$target_spec" @nvim_socket "$sock"
+	_result=$(nvim_socket "$target_pid" "$target_cached" "$target_cached_pid") || return
+	sock=${_result%%"$NL"*}; _npid=${_result#*"$NL"}
+	if [ "$sock" != "$target_cached" ]; then
+		tmux set-option -p -t "$target_spec" @nvim_socket "$sock" \; \
+			set-option -p -t "$target_spec" @nvim_pid "$_npid"
+	fi
 	nvim --headless --server "$sock" --remote-expr \
 		"execute('999wincmd $opposite')" >/dev/null 2>&1 || true
 }
@@ -68,8 +86,12 @@ if [ "$pane_cmd" != "nvim" ]; then
 	exit
 fi
 
-socket=$(nvim_socket "$pane_pid" "$cached_sock") || { navigate_tmux; exit; }
-[ "$socket" != "$cached_sock" ] && tmux set-option -p @nvim_socket "$socket"
+_result=$(nvim_socket "$pane_pid" "$cached_sock" "$cached_nvim_pid") || { navigate_tmux; exit; }
+socket=${_result%%"$NL"*}; _npid=${_result#*"$NL"}
+if [ "$socket" != "$cached_sock" ]; then
+	tmux set-option -p @nvim_socket "$socket" \; \
+		set-option -p @nvim_pid "$_npid"
+fi
 
 # try wincmd in nvim — returns 1 if at edge (winnr unchanged), 0 if moved
 at_edge=$(nvim --headless --server "$socket" --remote-expr \
