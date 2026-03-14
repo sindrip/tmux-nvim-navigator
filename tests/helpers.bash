@@ -55,7 +55,7 @@ nvim_winnr() {
 	local sock
 	sock=$(testmux display-message -t "$pane" -p '#{@nvim_socket}')
 	[ -n "$sock" ] && [ -S "$sock" ] || return 1
-	nvim --server "$sock" --remote-expr "winnr()" 2>/dev/null
+	nvim --headless --server "$sock" --remote-expr "winnr()" 2>&1
 }
 
 nvim_vsplit() {
@@ -69,6 +69,6 @@ nvim_vsplit() {
 		sock=$(testmux display-message -t "$pane" -p '#{@nvim_socket}')
 	fi
 	for ((i = 0; i < count; i++)); do
-		nvim --server "$sock" --remote-expr "luaeval('vim.cmd(\"vsplit\")')" >/dev/null 2>&1
+		nvim --headless --server "$sock" --remote-expr "execute('vsplit')" >/dev/null 2>&1
 	done
 }

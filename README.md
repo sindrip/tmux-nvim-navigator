@@ -27,3 +27,7 @@ bind -n C-j run-shell "/path/to/bin/tmux-navigate down"
 bind -n C-k run-shell "/path/to/bin/tmux-navigate up"
 bind -n C-l run-shell "/path/to/bin/tmux-navigate right"
 ```
+
+## Known issues
+
+- If a pane has a backgrounded Neovim process (e.g. via `Ctrl-Z`) and a new Neovim instance is started in the foreground, navigation will be sent to the backgrounded instance instead of the foreground one.

@@ -43,7 +43,7 @@ load helpers
 	# move nvim cursor to rightmost split
 	local sock
 	sock=$(testmux display-message -t "$TEST_SESSION.0" -p '#{@nvim_socket}')
-	nvim --server "$sock" --remote-expr "luaeval('vim.cmd(\"999wincmd l\")')" >/dev/null 2>&1
+	nvim --headless --server "$sock" --remote-expr "execute('999wincmd l')" >/dev/null 2>&1
 
 	# switch to pane 1, then navigate left into nvim
 	testmux select-pane -t "$TEST_SESSION.1"
@@ -53,9 +53,9 @@ load helpers
 	# reposition should have sent 999wincmd l (opposite of left) — cursor at rightmost
 	local sock winnr_before winnr_after
 	sock=$(testmux display-message -t "$TEST_SESSION.0" -p '#{@nvim_socket}')
-	winnr_before=$(nvim --server "$sock" --remote-expr "winnr()" 2>/dev/null)
-	nvim --server "$sock" --remote-expr "luaeval('vim.cmd(\"wincmd l\")')" >/dev/null 2>&1
-	winnr_after=$(nvim --server "$sock" --remote-expr "winnr()" 2>/dev/null)
+	winnr_before=$(nvim --headless --server "$sock" --remote-expr "winnr()" 2>&1)
+	nvim --headless --server "$sock" --remote-expr "execute('wincmd l')" >/dev/null 2>&1
+	winnr_after=$(nvim --headless --server "$sock" --remote-expr "winnr()" 2>&1)
 	# if already at rightmost edge, wincmd l shouldn't change winnr
 	[ "$winnr_before" = "$winnr_after" ]
 }
@@ -68,17 +68,41 @@ load helpers
 	# move to rightmost split
 	local sock
 	sock=$(testmux display-message -t "$TEST_SESSION.0" -p '#{@nvim_socket}')
-	nvim --server "$sock" --remote-expr "luaeval('vim.cmd(\"999wincmd l\")')" >/dev/null 2>&1
+	nvim --headless --server "$sock" --remote-expr "execute('999wincmd l')" >/dev/null 2>&1
 	local before after
-	before=$(nvim --server "$sock" --remote-expr "winnr()" 2>/dev/null)
+	before=$(nvim --headless --server "$sock" --remote-expr "winnr()" 2>&1)
 
 	# navigate right at edge — should wrap to leftmost
 	navigate right
-	after=$(nvim --server "$sock" --remote-expr "winnr()" 2>/dev/null)
-	echo "sock=$sock before=$before after=$after" >&2
-	echo "pane_cmd=$(testmux display-message -t "$TEST_SESSION.0" -p '#{pane_current_command}')" >&2
-	echo "cached=$(testmux display-message -t "$TEST_SESSION.0" -p '#{@nvim_socket}')" >&2
+	after=$(nvim --headless --server "$sock" --remote-expr "winnr()" 2>&1)
 	[ "$before" != "$after" ]
+}
+
+# Known issue: pgrep -oP finds the oldest nvim child, which is the
+# backgrounded (stopped) instance. The stopped nvim can't respond to RPC,
+# so navigation hangs. This test confirms pgrep picks the wrong process.
+@test "known issue: pgrep finds backgrounded nvim instead of foreground" {
+	start_session 1
+	start_nvim "$TEST_SESSION.0"
+
+	# background nvim and start a fresh one
+	testmux send-keys -t "$TEST_SESSION.0" C-z
+	sleep 0.5
+	start_nvim "$TEST_SESSION.0"
+
+	local shell_pid bg_pid fg_pid found_pid
+	shell_pid=$(testmux display-message -t "$TEST_SESSION.0" -p '#{pane_pid}')
+	bg_pid=$(pgrep -oP "$shell_pid" nvim 2>/dev/null)
+	fg_pid=$(pgrep -P "$shell_pid" nvim 2>/dev/null | tail -1)
+
+	# the two instances should be different
+	[ "$bg_pid" != "$fg_pid" ]
+
+	# pgrep -oP (used by the script) returns the older, backgrounded one
+	[ "$bg_pid" -lt "$fg_pid" ]
+
+	# the backgrounded process is stopped
+	case "$(ps -o state= -p "$bg_pid")" in T*) ;; *) return 1 ;; esac
 }
 
 @test "cache: socket is cached on pane option" {

@@ -12,8 +12,9 @@ esac
 NL='
 '
 both=$(tmux display-message -p "#{pane_current_command} #{pane_pid} #{@nvim_socket}" \; \
-	display-message -t "$target_spec" -p "#{pane_current_command} #{pane_pid} #{@nvim_socket}")
+	display-message -t "$target_spec" -p "#{pane_current_command} #{pane_pid} #{@nvim_socket}" 2>/dev/null) || true
 info=${both%%"$NL"*}; target_info=${both#*"$NL"}
+[ "$target_info" = "$both" ] && target_info=""
 pane_cmd=${info%% *}; rest=${info#* }
 pane_pid=${rest%% *}; cached_sock=${rest#* }
 target_cmd=${target_info%% *}; target_rest=${target_info#* }
@@ -35,8 +36,16 @@ nvim_socket() {
 	fi
 	_pid=$(pgrep -oP "$1" nvim 2>/dev/null) || return 1
 	_pid=$(find_nvim "$_pid")
-	_sock=$(lsof -U -a -p "$_pid" -Fn 2>/dev/null | grep -m1 "^n.*nvim\.${_pid}\.")
-	_sock=${_sock#n}
+	# try standard paths (Linux), then lsof (macOS/BSD)
+	for _d in "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}" /tmp/nvim.*/*/; do
+		for _s in "$_d"/nvim."$_pid".* ; do
+			[ -S "$_s" ] && _sock="$_s" && break 2
+		done
+	done
+	if [ -z "$_sock" ]; then
+		_sock=$(lsof -U -a -p "$_pid" -Fn 2>/dev/null | grep -m1 "^n.*nvim\.${_pid}\.")
+		_sock=${_sock#n}
+	fi
 	[ -n "$_sock" ] || return 1
 	echo "$_sock"
 }
@@ -45,8 +54,8 @@ reposition_target() {
 	[ "$target_cmd" != "nvim" ] && return
 	sock=$(nvim_socket "$target_pid" "$target_cached") || return
 	[ "$sock" != "$target_cached" ] && tmux set-option -p -t "$target_spec" @nvim_socket "$sock"
-	nvim --server "$sock" --remote-expr \
-		"luaeval('vim.cmd(\"999wincmd $opposite\")')" >/dev/null 2>&1 || true
+	nvim --headless --server "$sock" --remote-expr \
+		"execute('999wincmd $opposite')" >/dev/null 2>&1 || true
 }
 
 navigate_tmux() {
@@ -63,14 +72,14 @@ socket=$(nvim_socket "$pane_pid" "$cached_sock") || { navigate_tmux; exit; }
 [ "$socket" != "$cached_sock" ] && tmux set-option -p @nvim_socket "$socket"
 
 # try wincmd in nvim — returns 1 if at edge (winnr unchanged), 0 if moved
-at_edge=$(nvim --server "$socket" --remote-expr \
-	"luaeval('(function() local w = vim.fn.winnr(); vim.cmd(\"wincmd $dir\"); return vim.fn.winnr() == w and 1 or 0 end)()')" 2>/dev/null) || true
+at_edge=$(nvim --headless --server "$socket" --remote-expr \
+	"execute('let g:_w=winnr()|wincmd $dir').(winnr()==g:_w)" 2>&1) || true
 
 if [ "$at_edge" != "0" ]; then
 	if [ -z "$target_cmd" ]; then
 		# single pane — wrap within nvim
-		nvim --server "$socket" --remote-expr \
-			"luaeval('vim.cmd(\"999wincmd $opposite\")')" >/dev/null 2>&1 || true
+		nvim --headless --server "$socket" --remote-expr \
+			"execute('999wincmd $opposite')" >/dev/null 2>&1 || true
 	else
 		navigate_tmux
 	fi
