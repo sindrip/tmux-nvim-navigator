@@ -23,9 +23,18 @@ jobs:
         id: nixpkgs
         run: |
           case "${{ matrix.tmux-version }}" in
-            3.0)  echo "tmux=ee355d50a38e489e722fcbc7a7e6e45f7c74ce95" ;;
-            3.1)  echo "tmux=4426104c8c900fbe048c33a0e6f68a006235ac50" ;;
-            3.6a) echo "tmux=nixpkgs-unstable" ;;
+            3.0)
+              echo "tmux=ee355d50a38e489e722fcbc7a7e6e45f7c74ce95"
+              echo "tmux-legacy=true"
+              ;;
+            3.1)
+              echo "tmux=4426104c8c900fbe048c33a0e6f68a006235ac50"
+              echo "tmux-legacy=true"
+              ;;
+            3.6a)
+              echo "tmux=nixpkgs-unstable"
+              echo "tmux-legacy=false"
+              ;;
           esac >> "$GITHUB_OUTPUT"
 
           case "${{ matrix.neovim-version }}" in
@@ -36,7 +45,12 @@ jobs:
           esac >> "$GITHUB_OUTPUT"
 
       - name: Install tmux ${{ matrix.tmux-version }}
-        run: nix-env -f "https://github.com/NixOS/nixpkgs/archive/${{ steps.nixpkgs.outputs.tmux }}.tar.gz" -iA tmux
+        run: |
+          ARGS=""
+          if [ "$RUNNER_OS" = "macOS" ] && [ "${{ steps.nixpkgs.outputs.tmux-legacy }}" = "true" ]; then
+            ARGS="--argstr system x86_64-darwin"
+          fi
+          nix-env -f "https://github.com/NixOS/nixpkgs/archive/${{ steps.nixpkgs.outputs.tmux }}.tar.gz" $ARGS -iA tmux
 
       - name: Install neovim ${{ matrix.neovim-version }}
         run: nix-env -f "https://github.com/NixOS/nixpkgs/archive/${{ steps.nixpkgs.outputs.nvim }}.tar.gz" -iA neovim
