@@ -3,27 +3,11 @@
 [![CI](https://github.com/sindrip/tmux-nvim-navigator/actions/workflows/ci.yml/badge.svg)](https://github.com/sindrip/tmux-nvim-navigator/actions/workflows/ci.yml)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-Navigate between tmux panes and Neovim splits seamlessly — pure tmux, no Neovim plugins or config required.
-
-<video src="https://sindrip.github.io/tmux-nvim-navigator/demo.mp4"></video>
+Navigate between tmux panes and Neovim splits with `Ctrl-h/j/k/l`. Pure tmux — no Neovim plugin or config needed.
 
 [![demo](https://sindrip.github.io/tmux-nvim-navigator/demo.gif)](https://sindrip.github.io/tmux-nvim-navigator/demo.mp4)
 
-
-## Features
-
-- **Zero Neovim setup** — works with any Neovim config, including `--clean` and multiple `NVIM_APPNAME` configurations
-- **Cursor repositioning** — when entering a Neovim pane, the cursor jumps to the nearest split on the side you came from
-- **Handles backgrounded Neovim** — correctly navigates to the foreground instance, ignoring stopped processes
-
-## Default keybindings
-
-| Key | Direction |
-|-----|-----------|
-| `Ctrl-h` | Left |
-| `Ctrl-j` | Down |
-| `Ctrl-k` | Up |
-| `Ctrl-l` | Right |
+Works with any Neovim config, including `--clean` and multiple `NVIM_APPNAME` setups. When entering a Neovim pane, the cursor is repositioned to the nearest split on the side you came from.
 
 ## Requirements
 
@@ -70,9 +54,9 @@ When you navigate in a direction:
 
 All of this is handled entirely on the tmux side via Neovim's `--remote-expr` RPC interface over the Unix socket. Your Neovim config stays completely untouched.
 
-## Comparison with alternatives
+## Alternatives
 
-Most navigation plugins require coordinated configuration on both the tmux and Neovim sides. tmux-nvim-navigator works entirely from tmux.
+Other plugins require configuration for both programs:
 
 | Plugin | Neovim plugin required? | tmux config required? |
 |--------|:-----------------------:|:---------------------:|
