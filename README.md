@@ -5,7 +5,10 @@
 
 Navigate between tmux panes and Neovim splits seamlessly — pure tmux, no Neovim plugins or config required.
 
-<video src="https://github.com/sindrip/tmux-nvim-navigator/releases/download/demo/demo.mp4"></video>
+<video src="https://sindrip.github.io/tmux-nvim-navigator/demo.mp4"></video>
+
+[![demo](https://sindrip.github.io/tmux-nvim-navigator/demo.gif)](https://sindrip.github.io/tmux-nvim-navigator/demo.mp4)
+
 
 ## Features
 
@@ -37,6 +40,15 @@ Add the plugin to your `tmux.conf`:
 set -g @plugin 'sindrip/tmux-nvim-navigator'
 ```
 
+To customize the keybindings, set these options **before** the plugin line:
+
+```tmux
+set -g @tmux-nvim-navigator-left  'C-h'
+set -g @tmux-nvim-navigator-down  'C-j'
+set -g @tmux-nvim-navigator-up    'C-k'
+set -g @tmux-nvim-navigator-right 'C-l'
+```
+
 ### Manual
 
 Add these to your `tmux.conf`:
@@ -46,17 +58,6 @@ bind -n C-h run-shell "/path/to/bin/tmux-navigate left"
 bind -n C-j run-shell "/path/to/bin/tmux-navigate down"
 bind -n C-k run-shell "/path/to/bin/tmux-navigate up"
 bind -n C-l run-shell "/path/to/bin/tmux-navigate right"
-```
-
-## Configuration
-
-To customize the keybindings, set these options **before** the plugin line in your `tmux.conf`:
-
-```tmux
-set -g @tmux-nvim-navigator-left  'C-h'
-set -g @tmux-nvim-navigator-down  'C-j'
-set -g @tmux-nvim-navigator-up    'C-k'
-set -g @tmux-nvim-navigator-right 'C-l'
 ```
 
 ## How it works
@@ -73,9 +74,9 @@ All of this is handled entirely on the tmux side via Neovim's `--remote-expr` RP
 
 Most navigation plugins require coordinated configuration on both the tmux and Neovim sides. tmux-nvim-navigator works entirely from tmux.
 
-| Plugin | Neovim plugin required? | tmux plugin required? |
+| Plugin | Neovim plugin required? | tmux config required? |
 |--------|:-----------------------:|:---------------------:|
 | **tmux-nvim-navigator** | **No** | Yes |
 | [vim-tmux-navigator](https://github.com/christoomey/vim-tmux-navigator) | Yes | Yes |
-| [smart-splits.nvim](https://github.com/mrjones2014/smart-splits.nvim) | Yes | No |
-| [nvim-tmux-navigation](https://github.com/alexghergh/nvim-tmux-navigation) | Yes | Optional |
+| [smart-splits.nvim](https://github.com/mrjones2014/smart-splits.nvim) | Yes | Yes |
+| [nvim-tmux-navigation](https://github.com/alexghergh/nvim-tmux-navigation) | Yes | Yes |
