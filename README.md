@@ -5,7 +5,7 @@
 
 Navigate between tmux panes and Neovim splits seamlessly — pure tmux, no Neovim plugins or config required.
 
-<!-- TODO: Add demo GIF (consider recording with https://github.com/charmbracelet/vhs) -->
+<video src="https://github.com/sindrip/tmux-nvim-navigator/releases/download/demo/demo.mp4"></video>
 
 ## Features
 
