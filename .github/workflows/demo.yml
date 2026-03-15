@@ -1,0 +1,50 @@
+name: Demo
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - demo.tape
+      - demo.conf
+      - bin/**
+
+jobs:
+  demo:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - uses: actions/checkout@v4
+
+      # --- tmux ---
+      - name: Install tmux
+        run: |
+          curl -sL https://github.com/tmux/tmux-builds/releases/download/v3.6a/tmux-3.6a-linux-x86_64.tar.gz \
+            | sudo tar xz -C /usr/local/bin --strip-components=1
+
+      # --- neovim ---
+      - uses: rhysd/action-setup-vim@v1
+        with:
+          neovim: true
+          version: stable
+
+      # --- vhs ---
+      - name: Install Homebrew
+        uses: Homebrew/actions/setup-homebrew@master
+
+      - name: Install VHS
+        run: brew install vhs
+
+      - name: Generate demo
+        env:
+          TERM: xterm-256color
+        run: vhs demo.tape
+
+      # --- upload to release ---
+      - name: Upload demo to release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create demo --title "Demo assets" --notes "Auto-generated demo assets" 2>/dev/null || true
+          gh release upload demo demo.mp4 --clobber
