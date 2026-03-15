@@ -17,7 +17,28 @@ All of this is handled entirely on the tmux side by communicating with Neovim ov
 - tmux >= 3.0
 - Neovim >= 0.8
 
-## Keybindings
+## Installation
+
+### TPM (recommended)
+
+Add the plugin to your `tmux.conf`:
+
+```tmux
+set -g @plugin 'sindrip/tmux-nvim-navigator'
+```
+
+Then press `prefix + I` to install.
+
+To customize the keybindings, set these options **before** the plugin line:
+
+```tmux
+set -g @tmux-nvim-navigator-left  'C-h'
+set -g @tmux-nvim-navigator-down  'C-j'
+set -g @tmux-nvim-navigator-up    'C-k'
+set -g @tmux-nvim-navigator-right 'C-l'
+```
+
+### Manual
 
 Add these to your `tmux.conf`:
 
