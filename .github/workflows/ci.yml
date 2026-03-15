@@ -7,7 +7,7 @@ on:
 
 jobs:
   test:
-    runs-on: ubuntu-24.04
+    runs-on: ${{ matrix.runner }}
     strategy:
       fail-fast: false
       matrix:
@@ -19,6 +19,11 @@ jobs:
           - "v0.11.0"
           - "stable"
           - "nightly"
+        include:
+          - tmux-version: "3.0a"
+            runner: ubuntu-22.04
+          - tmux-version: "3.6a"
+            runner: ubuntu-24.04
 
     steps:
       - uses: actions/checkout@v4
@@ -28,7 +33,7 @@ jobs:
         if: matrix.tmux-version == '3.0a'
         run: |
           wget -q http://archive.ubuntu.com/ubuntu/pool/main/t/tmux/tmux_3.0a-2ubuntu0.4_amd64.deb
-          sudo apt-get install -y ./tmux_3.0a-2ubuntu0.4_amd64.deb
+          sudo apt-get install -y --allow-downgrades ./tmux_3.0a-2ubuntu0.4_amd64.deb
 
       - name: Install tmux 3.6a (static binary)
         if: matrix.tmux-version == '3.6a'
