@@ -51,7 +51,7 @@ nvim_socket() {
 	_first=$(pgrep_nvim "$1") || return 1
 	_pid=$(find_nvim "$_first")
 	# try standard paths (Linux), then lsof (macOS/BSD)
-	for _d in "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}" /tmp/nvim.*/*/; do
+	for _d in "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}" "${TMPDIR}:-/tmp"; do
 		for _s in "$_d"/nvim."$_pid".* ; do
 			[ -S "$_s" ] && _sock="$_s" && break 2
 		done
