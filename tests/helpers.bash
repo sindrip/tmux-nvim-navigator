@@ -24,7 +24,12 @@ start_session() {
 
 start_nvim() {
 	local pane=${1:-"$TEST_SESSION.0"}
-	testmux send-keys -t "$pane" 'nvim --clean' Enter
+	local listen=${2:-}
+	if [ -n "$listen" ]; then
+		testmux send-keys -t "$pane" "nvim --clean --listen $listen" Enter
+	else
+		testmux send-keys -t "$pane" 'nvim --clean' Enter
+	fi
 	wait_for_nvim "$pane"
 }
 

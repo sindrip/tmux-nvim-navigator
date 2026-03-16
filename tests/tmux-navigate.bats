@@ -81,28 +81,40 @@ load helpers
 @test "backgrounded nvim: navigates with foreground instance" {
 	start_session 2
 	start_nvim "$TEST_SESSION.0"
+	nvim_vsplit "$TEST_SESSION.0" 1
 
-	# navigate once to populate the socket cache
+	# cross through both nvim splits to pane 1, then wrap back to pane 0
 	navigate right
-	navigate left
+	navigate right
+	[ "$(active_pane)" = "1" ]
+	navigate right
+	[ "$(active_pane)" = "0" ]
 
-	local old_sock
-	old_sock=$(testmux display-message -t "$TEST_SESSION.0" -p '#{@nvim_socket}')
-
-	# background nvim and start a fresh one
+	# background nvim and start a fresh one (no vsplit)
 	testmux send-keys -t "$TEST_SESSION.0" C-z
 	sleep 0.5
 	start_nvim "$TEST_SESSION.0"
 
-	# navigate without clearing cache — script should skip stale cached socket
+	# right twice: new nvim has 1 window so first right crosses to w2,
+	# second right wraps back to the nvim pane
+	navigate right
+	navigate right
+	[ "$(active_pane)" = "0" ]
+}
+
+@test "nvim --listen: discovers custom socket name" {
+	start_session 2
+	start_nvim "$TEST_SESSION.0" "custom-sock"
+
 	navigate right
 	[ "$(active_pane)" = "1" ]
 
-	# verify the socket was updated to the new nvim instance
 	navigate left
-	local new_sock
-	new_sock=$(testmux display-message -t "$TEST_SESSION.0" -p '#{@nvim_socket}')
-	[ "$old_sock" != "$new_sock" ]
+	[ "$(active_pane)" = "0" ]
+
+	local sock
+	sock=$(testmux display-message -t "$TEST_SESSION.0" -p '#{@nvim_socket}')
+	[[ "$sock" == *custom-sock* ]]
 }
 
 @test "cache: socket is cached on pane option" {
