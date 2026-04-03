@@ -32,15 +32,6 @@ pgrep_nvim() {
     return 1
 }
 
-find_nvim() {
-	child=$(pgrep_nvim "$1") || true
-	if [ -n "$child" ]; then
-		find_nvim "$child"
-	else
-		echo "$1"
-	fi
-}
-
 # nvim_socket parent_pid [cached_socket] [cached_nvim_pid]
 # Outputs: socket_path\nnvim_pid  (two lines)
 nvim_socket() {
@@ -49,16 +40,27 @@ nvim_socket() {
 			printf '%s\n%s' "$2" "$3"; return ;; esac
 	fi
 	_first=$(pgrep_nvim "$1") || return 1
-	_pid=$(find_nvim "$_first")
-	# try standard paths (Linux), then lsof (macOS/BSD)
-	for _d in "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}" /tmp/nvim.*/*/; do
-		for _s in "$_d"/nvim."$_pid".* ; do
+	_sock=""
+	# try standard paths, then lsof (macOS/BSD)
+	for _d in "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}" "${TMPDIR:-/tmp}" /tmp/nvim.*/*/; do
+		for _s in "$_d"/nvim."$_first".* ; do
 			[ -S "$_s" ] && _sock="$_s" && break 2
 		done
 	done
 	if [ -z "$_sock" ]; then
-		_sock=$(lsof -U -a -p "$_pid" -Fn 2>/dev/null | grep -m1 "^n.*nvim\.${_pid}\.")
-		_sock=${_sock#n}
+		_children=$(pgrep -P "$_first" 2>/dev/null | tr '\n' ',')
+		_children=${_children%,}
+		_pids=$_first${_children:+,$_children}
+		_all=$(lsof -U -a -p "$_pids" -Fn 2>/dev/null | sed -n 's/^n\(\/.*\)/\1/p')
+		for _s in $_all; do
+			[ -S "$_s" ] || continue
+			case "${_s##*/}" in nvim."$_first".*) _sock="$_s"; break ;; esac
+		done
+		if [ -z "$_sock" ]; then
+			for _s in $_all; do
+				[ -S "$_s" ] && _sock="$_s" && break
+			done
+		fi
 	fi
 	[ -n "$_sock" ] || return 1
 	printf '%s\n%s' "$_sock" "$_first"
@@ -66,7 +68,7 @@ nvim_socket() {
 
 reposition_target() {
 	[ "$target_cmd" != "nvim" ] && return
-	_result=$(nvim_socket "$target_pid" "$target_cached" "$target_cached_pid") || return
+	_result=$(nvim_socket "$target_pid" "$target_cached" "$target_cached_pid") || return 0
 	sock=${_result%%"$NL"*}; _npid=${_result#*"$NL"}
 	if [ "$sock" != "$target_cached" ]; then
 		tmux set-option -p -t "$target_spec" @nvim_socket "$sock" \; \
