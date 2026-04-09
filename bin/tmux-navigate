@@ -67,13 +67,27 @@ nvim_socket() {
 	fi
 	# fallback: trace the TUI's unix socket to find a detached server (e.g. after :restart)
 	if [ -z "$_sock" ]; then
-		_peer=$(_timeout 2 lsof -U -a -p "$_first" 2>/dev/null \
-			| awk '{for(i=1;i<=NF;i++) if($i ~ /^->0x/) {sub(/^->/, "", $i); print $i; exit}}')
-		if [ -n "$_peer" ]; then
-			_match=$(_timeout 2 lsof -U -c nvim 2>/dev/null \
-				| grep -F "$_peer" | grep -v -- '->')
-			_sock=$(echo "$_match" | awk '{print $NF}')
-			_first=$(echo "$_match" | awk '{print $2}')
+		if [ -d /proc/net ]; then
+			# Linux: use ss + /proc/net/unix
+			_peer_ino=$(ss -xpn 2>/dev/null \
+				| awk -v pid="pid=$_first," '$0 ~ pid {print $8; exit}')
+			if [ -n "$_peer_ino" ]; then
+				_match=$(awk -v ino="$_peer_ino" '$7 == ino && $8 ~ /nvim\./ {print $8}' /proc/net/unix 2>/dev/null)
+				if [ -n "$_match" ] && [ -S "$_match" ]; then
+					_sock="$_match"
+					_first=$(echo "$_sock" | sed 's/.*nvim\.\([0-9]*\)\..*/\1/')
+				fi
+			fi
+		else
+			# macOS: use lsof to match kernel socket addresses
+			_peer=$(_timeout 2 lsof -U -a -p "$_first" 2>/dev/null \
+				| awk '{for(i=1;i<=NF;i++) if($i ~ /^->0x/) {sub(/^->/, "", $i); print $i; exit}}')
+			if [ -n "$_peer" ]; then
+				_match=$(_timeout 2 lsof -U -c nvim 2>/dev/null \
+					| grep -F "$_peer" | grep -v -- '->')
+				_sock=$(echo "$_match" | awk '{print $NF}')
+				_first=$(echo "$_match" | awk '{print $2}')
+			fi
 		fi
 	fi
 	[ -n "$_sock" ] || return 1
