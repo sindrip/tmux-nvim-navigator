@@ -1,6 +1,9 @@
 #!/usr/bin/env sh
 set -e
 
+# Run a command with a timeout in seconds. Kills the process with SIGALRM.
+_timeout() { _t=$1; shift; perl -e 'alarm shift; exec @ARGV' -- "$_t" "$@"; }
+
 case "$1" in
 	left)  dir=h; tmux_dir=L; opposite=l; target_spec='{left-of}'   ;;
 	down)  dir=j; tmux_dir=D; opposite=k; target_spec='{down-of}'   ;;
@@ -51,7 +54,7 @@ nvim_socket() {
 		_children=$(pgrep -P "$_first" 2>/dev/null | tr '\n' ',')
 		_children=${_children%,}
 		_pids=$_first${_children:+,$_children}
-		_all=$(lsof -U -a -p "$_pids" -Fn 2>/dev/null | sed -n 's/^n\(\/.*\)/\1/p')
+		_all=$(_timeout 2 lsof -U -a -p "$_pids" -Fn 2>/dev/null | sed -n 's/^n\(\/.*\)/\1/p')
 		for _s in $_all; do
 			[ -S "$_s" ] || continue
 			case "${_s##*/}" in nvim."$_first".*) _sock="$_s"; break ;; esac
@@ -60,6 +63,31 @@ nvim_socket() {
 			for _s in $_all; do
 				[ -S "$_s" ] && _sock="$_s" && break
 			done
+		fi
+	fi
+	# fallback: trace the TUI's unix socket to find a detached server (e.g. after :restart)
+	if [ -z "$_sock" ]; then
+		if [ -d /proc/net ]; then
+			# Linux: use ss + /proc/net/unix
+			_peer_ino=$(ss -xpn 2>/dev/null \
+				| awk -v pid="pid=$_first," '$0 ~ pid {print $8; exit}')
+			if [ -n "$_peer_ino" ]; then
+				_match=$(awk -v ino="$_peer_ino" '$7 == ino && $8 ~ /nvim\./ {print $8}' /proc/net/unix 2>/dev/null)
+				if [ -n "$_match" ] && [ -S "$_match" ]; then
+					_sock="$_match"
+					_first=$(echo "$_sock" | sed 's/.*nvim\.\([0-9]*\)\..*/\1/')
+				fi
+			fi
+		else
+			# macOS: use lsof to match kernel socket addresses
+			_peer=$(_timeout 2 lsof -U -a -p "$_first" 2>/dev/null \
+				| awk '{for(i=1;i<=NF;i++) if($i ~ /^->0x/) {sub(/^->/, "", $i); print $i; exit}}')
+			if [ -n "$_peer" ]; then
+				_match=$(_timeout 2 lsof -U -c nvim 2>/dev/null \
+					| grep -F "$_peer" | grep -v -- '->')
+				_sock=$(echo "$_match" | awk '{print $NF}')
+				_first=$(echo "$_match" | awk '{print $2}')
+			fi
 		fi
 	fi
 	[ -n "$_sock" ] || return 1
@@ -74,7 +102,7 @@ reposition_target() {
 		tmux set-option -p -t "$target_spec" @nvim_socket "$sock" \; \
 			set-option -p -t "$target_spec" @nvim_pid "$_npid"
 	fi
-	nvim --headless --server "$sock" --remote-expr \
+	_timeout 1 nvim --headless --server "$sock" --remote-expr \
 		"execute('999wincmd $opposite')" >/dev/null 2>&1 || true
 }
 
@@ -88,6 +116,11 @@ if [ "$pane_cmd" != "nvim" ]; then
 	exit
 fi
 
+clear_cache() {
+	tmux set-option -p -u @nvim_socket \; \
+		set-option -p -u @nvim_pid
+}
+
 _result=$(nvim_socket "$pane_pid" "$cached_sock" "$cached_nvim_pid") || { navigate_tmux; exit; }
 socket=${_result%%"$NL"*}; _npid=${_result#*"$NL"}
 if [ "$socket" != "$cached_sock" ]; then
@@ -96,13 +129,17 @@ if [ "$socket" != "$cached_sock" ]; then
 fi
 
 # try wincmd in nvim — returns 1 if at edge (winnr unchanged), 0 if moved
-at_edge=$(nvim --headless --server "$socket" --remote-expr \
-	"execute('let g:_w=winnr()|wincmd $dir').(winnr()==g:_w)" 2>&1) || true
+at_edge=$(_timeout 1 nvim --headless --server "$socket" --remote-expr \
+	"execute('let g:_w=winnr()|wincmd $dir').(winnr()==g:_w)" 2>&1) || {
+	clear_cache
+	navigate_tmux
+	exit
+}
 
 if [ "$at_edge" != "0" ]; then
 	if [ -z "$target_cmd" ]; then
 		# single pane — wrap within nvim
-		nvim --headless --server "$socket" --remote-expr \
+		_timeout 1 nvim --headless --server "$socket" --remote-expr \
 			"execute('999wincmd $opposite')" >/dev/null 2>&1 || true
 	else
 		navigate_tmux

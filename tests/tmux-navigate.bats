@@ -134,6 +134,49 @@ load helpers
 	[ "$(active_pane)" = "1" ]
 }
 
+@test "nvim restart: discovers new server socket" {
+	# :restart requires nvim 0.12+
+	local ver
+	ver=$(nvim --version | head -1 | sed 's/[^0-9]*\([0-9]*\)\.\([0-9]*\).*/\1\2/')
+	[ "$ver" -ge 012 ] || skip "nvim < 0.12"
+
+	start_session 2
+	start_nvim "$TEST_SESSION.0"
+
+	# populate cache
+	navigate right
+	[ "$(active_pane)" = "1" ]
+	navigate left
+	[ "$(active_pane)" = "0" ]
+
+	local old_sock
+	old_sock=$(testmux display-message -t "$TEST_SESSION.0" -p '#{@nvim_socket}')
+	[ -n "$old_sock" ]
+
+	# restart nvim — new server process, old cache is stale
+	testmux send-keys -t "$TEST_SESSION.0" ':restart' Enter
+	wait_for_nvim "$TEST_SESSION.0"
+	sleep 1
+
+	# clear stale cache
+	testmux set-option -p -t "$TEST_SESSION.0" -u @nvim_socket 2>/dev/null || true
+	testmux set-option -p -t "$TEST_SESSION.0" -u @nvim_pid 2>/dev/null || true
+
+	# create splits in the new server and navigate through them
+	nvim_vsplit "$TEST_SESSION.0" 1
+
+	navigate right
+	[ "$(active_pane)" = "0" ]
+	navigate right
+	[ "$(active_pane)" = "1" ]
+
+	# cache should point to the new socket
+	local new_sock
+	new_sock=$(testmux display-message -t "$TEST_SESSION.0" -p '#{@nvim_socket}')
+	[ -n "$new_sock" ]
+	[ "$new_sock" != "$old_sock" ]
+}
+
 @test "cache: socket is cached on pane option" {
 	start_session 2
 	start_nvim "$TEST_SESSION.0"
