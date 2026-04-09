@@ -65,6 +65,17 @@ nvim_socket() {
 			done
 		fi
 	fi
+	# fallback: trace the TUI's unix socket to find a detached server (e.g. after :restart)
+	if [ -z "$_sock" ]; then
+		_peer=$(_timeout 2 lsof -U -a -p "$_first" 2>/dev/null \
+			| awk '{for(i=1;i<=NF;i++) if($i ~ /^->0x/) {sub(/^->/, "", $i); print $i; exit}}')
+		if [ -n "$_peer" ]; then
+			_match=$(_timeout 2 lsof -U -c nvim 2>/dev/null \
+				| grep -F "$_peer" | grep -v -- '->')
+			_sock=$(echo "$_match" | awk '{print $NF}')
+			_first=$(echo "$_match" | awk '{print $2}')
+		fi
+	fi
 	[ -n "$_sock" ] || return 1
 	printf '%s\n%s' "$_sock" "$_first"
 }
