@@ -135,6 +135,11 @@ load helpers
 }
 
 @test "nvim restart: discovers new server socket" {
+	# :restart requires nvim 0.12+
+	local ver
+	ver=$(nvim --version | head -1 | sed 's/[^0-9]*\([0-9]*\)\.\([0-9]*\).*/\1\2/')
+	[ "$ver" -ge 012 ] || skip "nvim < 0.12"
+
 	start_session 2
 	start_nvim "$TEST_SESSION.0"
 
